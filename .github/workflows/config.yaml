@@ -24,19 +24,31 @@ jobs:
         with:
           terraform_version: "1.8.x"
 
+      # Authenticate to GCP via Workload Identity Federation
       - id: auth
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
 
+      # Debug: confirm impersonation is actually happening
+      - name: Who am I (debug)
+        run: |
+          echo "GITHUB_REPOSITORY=$GITHUB_REPOSITORY"
+          echo "ADC file:"
+          cat $HOME/.config/gcloud/application_default_credentials.json || echo "NO ADC FILE FOUND"
+          echo ""
+          echo "gcloud auth list:"
+          gcloud auth list
+
+      # Terraform steps
       - run: terraform init
-
       - run: terraform fmt -check
-
       - run: terraform validate
 
-      - run: terraform plan -out=tfplan.binary -json > tfplan.json
+      # Generate plan (stable form)
+      - run: terraform plan -out=tfplan.binary
+      - run: terraform show -json tfplan.binary > tfplan.json
 
       - uses: actions/upload-artifact@v4
         with:
@@ -62,10 +74,18 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
 
+      - name: Who am I (debug)
+        run: |
+          echo "GITHUB_REPOSITORY=$GITHUB_REPOSITORY"
+          echo "ADC file:"
+          cat $HOME/.config/gcloud/application_default_credentials.json || echo "NO ADC FILE FOUND"
+          echo ""
+          echo "gcloud auth list:"
+          gcloud auth list
+
       - uses: actions/download-artifact@v4
         with:
           name: tfplan
 
       - run: terraform init
-
       - run: terraform apply tfplan.binary

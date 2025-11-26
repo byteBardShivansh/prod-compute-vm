@@ -1,6 +1,6 @@
 provider "google" {
-  region  = var.region
-  zone    = var.zone
+  region = var.region
+  zone   = var.zone
 }
 resource "google_compute_network" "network" {
   name = "vm-base-network"

@@ -16,7 +16,7 @@ env:
 jobs:
   plan:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    # no "if" here → runs for both pull_request and push to main
     steps:
       - uses: actions/checkout@v4
 
@@ -24,14 +24,12 @@ jobs:
         with:
           terraform_version: "1.8.x"
 
-      # Authenticate to GCP via Workload Identity Federation
       - id: auth
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
 
-      # Debug: confirm impersonation is actually happening
       - name: Who am I (debug)
         run: |
           echo "GITHUB_REPOSITORY=$GITHUB_REPOSITORY"
@@ -41,16 +39,23 @@ jobs:
           echo "gcloud auth list:"
           gcloud auth list
 
-      # Terraform steps
-      - run: terraform init
-      - run: terraform fmt -check
-      - run: terraform validate
+      - name: Terraform init
+        run: terraform init
 
-      # Generate plan (stable form)
-      - run: terraform plan -out=tfplan.binary
-      - run: terraform show -json tfplan.binary > tfplan.json
+      - name: Terraform fmt
+        run: terraform fmt -check
 
-      - uses: actions/upload-artifact@v4
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform plan
+        run: terraform plan -out=tfplan.binary
+
+      - name: Terraform show (json)
+        run: terraform show -json tfplan.binary > tfplan.json
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
         with:
           name: tfplan
           path: |
@@ -59,8 +64,8 @@ jobs:
 
   apply:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: plan
+    needs: plan                       # ensures "apply" runs right after "plan"
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
 
@@ -83,9 +88,13 @@ jobs:
           echo "gcloud auth list:"
           gcloud auth list
 
-      - uses: actions/download-artifact@v4
+      - name: Download plan artifact
+        uses: actions/download-artifact@v4
         with:
           name: tfplan
 
-      - run: terraform init
-      - run: terraform apply tfplan.binary
+      - name: Terraform init
+        run: terraform init
+
+      - name: Terraform apply
+        run: terraform apply tfplan.binary

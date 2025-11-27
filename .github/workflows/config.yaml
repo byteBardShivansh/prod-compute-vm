@@ -16,13 +16,14 @@ env:
 jobs:
   plan:
     runs-on: ubuntu-latest
-    # run on PRs OR push to main
-    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    # no "if" here → runs for both pull_request and push to main
     steps:
       - uses: actions/checkout@v4
+
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.8.x"
+
       - id: auth
         uses: google-github-actions/auth@v2
         with:
@@ -38,13 +39,23 @@ jobs:
           echo "gcloud auth list:"
           gcloud auth list
 
-      - run: terraform init
-      - run: terraform fmt -check
-      - run: terraform validate
-      - run: terraform plan -out=tfplan.binary
-      - run: terraform show -json tfplan.binary > tfplan.json
+      - name: Terraform init
+        run: terraform init
 
-      - uses: actions/upload-artifact@v4
+      - name: Terraform fmt
+        run: terraform fmt -check
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform plan
+        run: terraform plan -out=tfplan.binary
+
+      - name: Terraform show (json)
+        run: terraform show -json tfplan.binary > tfplan.json
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
         with:
           name: tfplan
           path: |
@@ -53,11 +64,11 @@ jobs:
 
   apply:
     runs-on: ubuntu-latest
-    # only on push to main
+    needs: plan                       # ensures "apply" runs right after "plan"
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: plan
     steps:
       - uses: actions/checkout@v4
+
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.8.x"
@@ -77,9 +88,13 @@ jobs:
           echo "gcloud auth list:"
           gcloud auth list
 
-      - uses: actions/download-artifact@v4
+      - name: Download plan artifact
+        uses: actions/download-artifact@v4
         with:
           name: tfplan
 
-      - run: terraform init
-      - run: terraform apply tfplan.binary
+      - name: Terraform init
+        run: terraform init
+
+      - name: Terraform apply
+        run: terraform apply tfplan.binary
